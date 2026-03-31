@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Key, Users, Instagram, TrendingUp, Copy, Video, CheckCircle, XCircle, LogOut, RefreshCw, Archive, Search, DollarSign, Activity, Wallet } from 'lucide-react';
+import { Key, Users, Instagram, TrendingUp, Copy, Video, CheckCircle, LogOut, RefreshCw, Archive, Search, Activity, Wallet } from 'lucide-react';
 
 const Dashboard = ({ token, onLogout }) => {
   const [agents, setAgents] = useState([]);
@@ -17,7 +17,6 @@ const Dashboard = ({ token, onLogout }) => {
   const [fetchingViews, setFetchingViews] = useState({});
 
   const API_BASE_URL = 'https://telegrambot.myworkonline.in';
-
   const axiosConfig = { headers: { Authorization: `Bearer ${token}` } };
 
   const fetchData = async () => {
@@ -34,10 +33,7 @@ const Dashboard = ({ token, onLogout }) => {
     }
   };
 
-  useEffect(() => {
-    fetchData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
+  useEffect(() => { fetchData(); }, [token]);
 
   const generateToken = async () => {
     setLoading(true);
@@ -50,31 +46,39 @@ const Dashboard = ({ token, onLogout }) => {
 
   const handleViewsChange = (videoId, value) => { setViewsInput(prev => ({ ...prev, [videoId]: value })); };
 
+  // NEW: Auto-Fetch now Auto-Saves
   const autoFetchViews = async (videoId, url) => {
     setFetchingViews(prev => ({ ...prev, [videoId]: true }));
     try {
-      const response = await axios.post(`${API_BASE_URL}/admin/videos/fetch-views`, { url }, axiosConfig);
+      // API call ab videoId bhi bhej rahi hai taaki backend khud save kar le
+      const response = await axios.post(`${API_BASE_URL}/admin/videos/fetch-views`, { url, videoId }, axiosConfig);
       if (response.data.success) {
-        handleViewsChange(videoId, response.data.views);
-        alert(`✅ Successfully fetched: ${response.data.views} views`);
+        alert(`✅ Views Fetched & Auto-Saved: ${response.data.views}`);
+        fetchData(); // Dashboard refresh karo taaki naye views dikh jayein
       }
     } catch (error) { alert('❌ Failed to fetch views via API.'); }
     setFetchingViews(prev => ({ ...prev, [videoId]: false }));
   };
 
+  // Manual update (Just in case API fails)
   const handleUpdateViews = async (videoId) => {
     const views = viewsInput[videoId];
     if (views === undefined || views === '') return alert("Please enter views first!");
     try {
       await axios.post(`${API_BASE_URL}/admin/videos/${videoId}/update-views`, { views }, axiosConfig);
+      alert("✅ Views saved manually!");
       fetchData(); 
     } catch (error) { console.error("Error updating views:", error); }
   };
 
+  // NEW: Reject with Reason Prompt
   const handleReject = async (videoId) => {
-    if (!window.confirm("Reject this video? Views will be deducted automatically if already added.")) return;
+    const reason = window.prompt("⚠️ Rejection Reason (This will be sent to the user on Telegram):");
+    if (reason === null) return; // Action cancelled by admin
+
     try {
-      await axios.post(`${API_BASE_URL}/admin/videos/${videoId}/reject`, {}, axiosConfig);
+      await axios.post(`${API_BASE_URL}/admin/videos/${videoId}/reject`, { reason }, axiosConfig);
+      alert("✅ Video Rejected & User Notified!");
       fetchData(); 
     } catch (error) { console.error("Error rejecting video:", error); }
   };
@@ -121,12 +125,21 @@ const Dashboard = ({ token, onLogout }) => {
     }
   };
 
+  // View Payment History Alert
+  const showPaymentHistory = (history) => {
+      if (!history || history.length === 0) {
+          alert("No past payments found for this user.");
+          return;
+      }
+      const text = history.map(h => `✅ ₹${h.amount} paid on ${new Date(h.date).toLocaleDateString()}`).join('\n');
+      alert(`📜 Payment History:\n\n${text}`);
+  };
+
   const copyToClipboard = () => {
     navigator.clipboard.writeText(newToken);
     alert('Token copied to clipboard! ✅');
   };
 
-  // Calculating Totals for UI Stats
   const totalPending = agents.reduce((sum, a) => sum + a.pendingAmount, 0) + users.reduce((sum, u) => sum + u.pendingAmount, 0);
 
   return (
@@ -138,10 +151,7 @@ const Dashboard = ({ token, onLogout }) => {
           <h1 className="text-2xl font-black bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-600 flex items-center">
             <TrendingUp className="mr-2 text-blue-600" size={28} /> Admin Portal
           </h1>
-          <button 
-            onClick={onLogout} 
-            className="flex items-center text-gray-500 hover:text-red-600 hover:bg-red-50 px-4 py-2 rounded-lg transition-all duration-200 font-medium"
-          >
+          <button onClick={onLogout} className="flex items-center text-gray-500 hover:text-red-600 hover:bg-red-50 px-4 py-2 rounded-lg transition-all duration-200 font-medium">
             <LogOut size={18} className="mr-2" /> Logout
           </button>
         </div>
@@ -149,7 +159,7 @@ const Dashboard = ({ token, onLogout }) => {
 
       <div className="max-w-7xl mx-auto px-6 py-8 space-y-8">
         
-        {/* --- SUMMARY STATS CARDS --- */}
+        {/* SUMMARY STATS CARDS */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center space-x-4">
             <div className="p-3 bg-purple-100 text-purple-600 rounded-xl"><Users size={24} /></div>
@@ -175,13 +185,13 @@ const Dashboard = ({ token, onLogout }) => {
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center space-x-4">
             <div className="p-3 bg-red-100 text-red-600 rounded-xl"><Wallet size={24} /></div>
             <div>
-              <p className="text-sm font-medium text-gray-500">Total Pending Payout</p>
+              <p className="text-sm font-medium text-gray-500">Pending Payouts</p>
               <h3 className="text-2xl font-bold text-gray-800">₹{totalPending}</h3>
             </div>
           </div>
         </div>
 
-        {/* --- TOKEN GENERATION --- */}
+        {/* TOKEN GENERATION */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 flex flex-col md:flex-row items-center justify-between">
           <div className="mb-4 md:mb-0">
             <h2 className="text-lg font-bold text-gray-800 flex items-center">
@@ -205,7 +215,7 @@ const Dashboard = ({ token, onLogout }) => {
           </div>
         </div>
 
-        {/* --- WEEKLY VIDEOS SECTION --- */}
+        {/* WEEKLY VIDEOS SECTION */}
         <div className="bg-white rounded-2xl shadow-sm border border-blue-100 overflow-hidden">
           <div className="px-6 py-5 border-b border-gray-100 bg-gradient-to-r from-blue-50 to-white flex flex-col md:flex-row justify-between items-center">
             <h2 className="text-lg font-bold text-blue-900 flex items-center">
@@ -237,33 +247,27 @@ const Dashboard = ({ token, onLogout }) => {
                     
                     <div className="space-y-3">
                       <div className="flex space-x-2">
-                        <input 
-                          type="number" 
-                          value={viewsInput[video._id] !== undefined ? viewsInput[video._id] : ''}
-                          placeholder="Current Views" 
-                          className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white flex-1 transition"
-                          onChange={(e) => handleViewsChange(video._id, e.target.value)}
-                        />
                         <button 
                           onClick={() => autoFetchViews(video._id, video.videoLink)}
                           disabled={fetchingViews[video._id]}
-                          className="bg-indigo-50 hover:bg-indigo-100 text-indigo-600 px-3 rounded-lg flex items-center justify-center transition"
-                          title="Auto-fetch views"
+                          className="w-full bg-purple-100 hover:bg-purple-200 text-purple-700 py-2.5 rounded-lg flex items-center justify-center font-bold transition"
                         >
-                          <RefreshCw size={18} className={fetchingViews[video._id] ? "animate-spin" : ""} />
+                          <RefreshCw size={18} className={`mr-2 ${fetchingViews[video._id] ? "animate-spin" : ""}`} />
+                          {fetchingViews[video._id] ? "Fetching..." : "Auto Fetch & Save"}
                         </button>
                       </div>
-                      <div className="flex space-x-2 pt-1">
-                        <button 
-                          onClick={() => handleUpdateViews(video._id)}
-                          className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg text-sm font-medium transition-colors shadow-sm"
-                        >
-                          Save Views
+
+                      <div className="flex space-x-2 pt-2 border-t border-gray-100">
+                        <input 
+                          type="number" 
+                          placeholder="Manual Views"
+                          className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 flex-1"
+                          onChange={(e) => handleViewsChange(video._id, e.target.value)}
+                        />
+                        <button onClick={() => handleUpdateViews(video._id)} className="bg-blue-600 hover:bg-blue-700 text-white px-3 rounded-lg text-xs font-medium transition">
+                          Save
                         </button>
-                        <button 
-                          onClick={() => handleReject(video._id)}
-                          className="flex-1 bg-white hover:bg-red-50 text-red-600 border border-red-200 py-2 rounded-lg flex items-center justify-center text-sm font-medium transition-colors"
-                        >
+                        <button onClick={() => handleReject(video._id)} className="bg-white hover:bg-red-50 text-red-600 border border-red-200 px-3 rounded-lg text-xs font-medium transition">
                           Reject
                         </button>
                       </div>
@@ -309,19 +313,13 @@ const Dashboard = ({ token, onLogout }) => {
                         </td>
                         <td className="px-6 py-4 font-mono text-gray-500 tracking-tight">{agent.bankDetails}</td>
                         <td className="px-6 py-4 font-medium text-gray-600">₹{agent.totalEarned}</td>
+                        <td className="px-6 py-4"><span className="text-emerald-600 font-semibold bg-emerald-50 px-2 py-1 rounded-md">₹{agent.paidAmount}</span></td>
                         <td className="px-6 py-4">
-                          <span className="text-emerald-600 font-semibold bg-emerald-50 px-2 py-1 rounded-md">₹{agent.paidAmount}</span>
-                        </td>
-                        <td className="px-6 py-4">
-                          <span className={`font-bold px-2 py-1 rounded-md ${agent.pendingAmount > 0 ? 'text-rose-600 bg-rose-50' : 'text-gray-400'}`}>
-                            ₹{agent.pendingAmount}
-                          </span>
+                          <span className={`font-bold px-2 py-1 rounded-md ${agent.pendingAmount > 0 ? 'text-rose-600 bg-rose-50' : 'text-gray-400'}`}>₹{agent.pendingAmount}</span>
                         </td>
                         <td className="px-6 py-4 text-center">
                           {agent.pendingAmount > 0 ? (
-                            <button onClick={() => handleAgentPay(agent.id)} className="bg-gray-900 hover:bg-black text-white px-4 py-1.5 rounded-lg text-xs font-semibold transition active:scale-95">
-                              Mark Paid
-                            </button>
+                            <button onClick={() => handleAgentPay(agent.id)} className="bg-gray-900 hover:bg-black text-white px-4 py-1.5 rounded-lg text-xs font-semibold transition active:scale-95">Mark Paid</button>
                           ) : (
                             <span className="text-gray-400 text-xs font-medium flex items-center justify-center"><CheckCircle size={14} className="mr-1"/> Cleared</span>
                           )}
@@ -348,27 +346,26 @@ const Dashboard = ({ token, onLogout }) => {
                     <th className="px-6 py-4">Total Views</th>
                     <th className="px-6 py-4">Bank Details</th>
                     <th className="px-6 py-4">Earned</th>
-                    <th className="px-6 py-4">Paid</th>
                     <th className="px-6 py-4">Pending</th>
                     <th className="px-6 py-4 text-center">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 text-sm">
                   {users.length === 0 ? (
-                    <tr><td colSpan="7" className="px-6 py-8 text-center text-gray-400">No creators found.</td></tr>
+                    <tr><td colSpan="6" className="px-6 py-8 text-center text-gray-400">No creators found.</td></tr>
                   ) : (
                     users.map((user, index) => (
                       <tr key={index} className="hover:bg-gray-50 transition-colors">
                         <td className="px-6 py-4">
                           <p className="font-bold text-gray-800">@{user.username}</p>
                           <p className="text-xs text-gray-400 mt-0.5">via {user.agentName}</p>
+                          <button onClick={() => showPaymentHistory(user.paymentHistory)} className="text-[10px] text-blue-500 hover:underline mt-1 font-semibold">
+                            View History 📜
+                          </button>
                         </td>
                         <td className="px-6 py-4 font-medium text-gray-600">{user.totalViews.toLocaleString()}</td>
                         <td className="px-6 py-4 font-mono text-gray-500 tracking-tight">{user.bankDetails}</td>
                         <td className="px-6 py-4 font-medium text-gray-600">₹{user.totalEarned}</td>
-                        <td className="px-6 py-4">
-                          <span className="text-emerald-600 font-semibold bg-emerald-50 px-2 py-1 rounded-md">₹{user.paidAmount}</span>
-                        </td>
                         <td className="px-6 py-4">
                           <span className={`font-bold px-2 py-1 rounded-md ${user.pendingAmount > 0 ? 'text-rose-600 bg-rose-50' : 'text-gray-400'}`}>
                             ₹{user.pendingAmount}
@@ -376,8 +373,8 @@ const Dashboard = ({ token, onLogout }) => {
                         </td>
                         <td className="px-6 py-4 text-center">
                           {user.pendingAmount > 0 ? (
-                            <button onClick={() => handleUserPay(user.id)} className="bg-gray-900 hover:bg-black text-white px-4 py-1.5 rounded-lg text-xs font-semibold transition active:scale-95">
-                              Mark Paid
+                            <button onClick={() => handleUserPay(user.id)} className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-1.5 rounded-lg text-xs font-semibold transition active:scale-95 shadow-sm">
+                              Pay Now
                             </button>
                           ) : (
                             <span className="text-gray-400 text-xs font-medium flex items-center justify-center"><CheckCircle size={14} className="mr-1"/> Cleared</span>
