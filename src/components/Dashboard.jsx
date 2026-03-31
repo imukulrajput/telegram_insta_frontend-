@@ -46,21 +46,20 @@ const Dashboard = ({ token, onLogout }) => {
 
   const handleViewsChange = (videoId, value) => { setViewsInput(prev => ({ ...prev, [videoId]: value })); };
 
-  // NEW: Auto-Fetch now Auto-Saves
+  // --- AUTO FETCH & SAVE VIEWS ---
   const autoFetchViews = async (videoId, url) => {
     setFetchingViews(prev => ({ ...prev, [videoId]: true }));
     try {
-      // API call ab videoId bhi bhej rahi hai taaki backend khud save kar le
       const response = await axios.post(`${API_BASE_URL}/admin/videos/fetch-views`, { url, videoId }, axiosConfig);
       if (response.data.success) {
         alert(`✅ Views Fetched & Auto-Saved: ${response.data.views}`);
-        fetchData(); // Dashboard refresh karo taaki naye views dikh jayein
+        fetchData(); 
       }
     } catch (error) { alert('❌ Failed to fetch views via API.'); }
     setFetchingViews(prev => ({ ...prev, [videoId]: false }));
   };
 
-  // Manual update (Just in case API fails)
+  // --- MANUAL UPDATE VIEWS ---
   const handleUpdateViews = async (videoId) => {
     const views = viewsInput[videoId];
     if (views === undefined || views === '') return alert("Please enter views first!");
@@ -71,18 +70,19 @@ const Dashboard = ({ token, onLogout }) => {
     } catch (error) { console.error("Error updating views:", error); }
   };
 
-  // NEW: Reject with Reason Prompt
+  // --- REJECT WITH REASON ---
   const handleReject = async (videoId) => {
-    const reason = window.prompt("⚠️ Rejection Reason (This will be sent to the user on Telegram):");
-    if (reason === null) return; // Action cancelled by admin
+    const reason = window.prompt("⚠️ Rejection Reason (This will be sent to the user on Telegram and saved in History):");
+    if (reason === null) return; // Action cancelled
 
     try {
       await axios.post(`${API_BASE_URL}/admin/videos/${videoId}/reject`, { reason }, axiosConfig);
-      alert("✅ Video Rejected & User Notified!");
+      alert("✅ Video Rejected, Reason Saved, & User Notified!");
       fetchData(); 
     } catch (error) { console.error("Error rejecting video:", error); }
   };
 
+  // --- END WEEK / CLEAR DASHBOARD ---
   const handleWeeklyReset = async () => {
     if (!window.confirm("Start a fresh week? Ensure all payments are cleared!")) return;
     try {
@@ -92,6 +92,7 @@ const Dashboard = ({ token, onLogout }) => {
     } catch (error) { console.error("Error clearing dashboard:", error); }
   };
 
+  // --- ARCHIVED HISTORY ---
   const fetchHistory = async () => {
     if (!showHistory) {
       try {
@@ -111,6 +112,7 @@ const Dashboard = ({ token, onLogout }) => {
     return vUser.includes(search) || agentName.includes(search);
   });
 
+  // --- PAYMENTS ---
   const handleAgentPay = async (agentId) => {
     if (window.confirm("Mark this Agent's pending amount as PAID?")) {
       await axios.post(`${API_BASE_URL}/admin/agents/${agentId}/pay`, {}, axiosConfig);
@@ -125,13 +127,12 @@ const Dashboard = ({ token, onLogout }) => {
     }
   };
 
-  // View Payment History Alert
   const showPaymentHistory = (history) => {
       if (!history || history.length === 0) {
           alert("No past payments found for this user.");
           return;
       }
-      const text = history.map(h => `✅ ₹${h.amount} paid on ${new Date(h.date).toLocaleDateString()}`).join('\n');
+      const text = history.map(h => `✅ ₹${Number(h.amount).toFixed(2)} paid on ${new Date(h.date).toLocaleDateString()}`).join('\n');
       alert(`📜 Payment History:\n\n${text}`);
   };
 
@@ -140,7 +141,7 @@ const Dashboard = ({ token, onLogout }) => {
     alert('Token copied to clipboard! ✅');
   };
 
-  const totalPending = agents.reduce((sum, a) => sum + a.pendingAmount, 0) + users.reduce((sum, u) => sum + u.pendingAmount, 0);
+  const totalPending = agents.reduce((sum, a) => sum + Number(a.pendingAmount), 0) + users.reduce((sum, u) => sum + Number(u.pendingAmount), 0);
 
   return (
     <div className="min-h-screen bg-gray-50 font-sans text-gray-800">
@@ -186,7 +187,7 @@ const Dashboard = ({ token, onLogout }) => {
             <div className="p-3 bg-red-100 text-red-600 rounded-xl"><Wallet size={24} /></div>
             <div>
               <p className="text-sm font-medium text-gray-500">Pending Payouts</p>
-              <h3 className="text-2xl font-bold text-gray-800">₹{totalPending}</h3>
+              <h3 className="text-2xl font-bold text-gray-800">₹{totalPending.toFixed(2)}</h3>
             </div>
           </div>
         </div>
@@ -312,13 +313,13 @@ const Dashboard = ({ token, onLogout }) => {
                           <span className="bg-gray-100 text-gray-600 px-2.5 py-1 rounded-full text-xs font-bold">{agent.accountsAdded}</span>
                         </td>
                         <td className="px-6 py-4 font-mono text-gray-500 tracking-tight">{agent.bankDetails}</td>
-                        <td className="px-6 py-4 font-medium text-gray-600">₹{agent.totalEarned}</td>
-                        <td className="px-6 py-4"><span className="text-emerald-600 font-semibold bg-emerald-50 px-2 py-1 rounded-md">₹{agent.paidAmount}</span></td>
+                        <td className="px-6 py-4 font-medium text-gray-600">₹{Number(agent.totalEarned).toFixed(2)}</td>
+                        <td className="px-6 py-4"><span className="text-emerald-600 font-semibold bg-emerald-50 px-2 py-1 rounded-md">₹{Number(agent.paidAmount).toFixed(2)}</span></td>
                         <td className="px-6 py-4">
-                          <span className={`font-bold px-2 py-1 rounded-md ${agent.pendingAmount > 0 ? 'text-rose-600 bg-rose-50' : 'text-gray-400'}`}>₹{agent.pendingAmount}</span>
+                          <span className={`font-bold px-2 py-1 rounded-md ${Number(agent.pendingAmount) > 0 ? 'text-rose-600 bg-rose-50' : 'text-gray-400'}`}>₹{Number(agent.pendingAmount).toFixed(2)}</span>
                         </td>
                         <td className="px-6 py-4 text-center">
-                          {agent.pendingAmount > 0 ? (
+                          {Number(agent.pendingAmount) > 0 ? (
                             <button onClick={() => handleAgentPay(agent.id)} className="bg-gray-900 hover:bg-black text-white px-4 py-1.5 rounded-lg text-xs font-semibold transition active:scale-95">Mark Paid</button>
                           ) : (
                             <span className="text-gray-400 text-xs font-medium flex items-center justify-center"><CheckCircle size={14} className="mr-1"/> Cleared</span>
@@ -332,7 +333,7 @@ const Dashboard = ({ token, onLogout }) => {
             </div>
           </div>
 
-          {/* Users Table */}
+          {/* Creators Table (Proportional Math applied) */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
             <div className="px-6 py-5 border-b border-gray-100 flex items-center">
               <div className="p-2 bg-pink-100 text-pink-600 rounded-lg mr-3"><Instagram size={20} /></div>
@@ -354,34 +355,38 @@ const Dashboard = ({ token, onLogout }) => {
                   {users.length === 0 ? (
                     <tr><td colSpan="6" className="px-6 py-8 text-center text-gray-400">No creators found.</td></tr>
                   ) : (
-                    users.map((user, index) => (
-                      <tr key={index} className="hover:bg-gray-50 transition-colors">
-                        <td className="px-6 py-4">
-                          <p className="font-bold text-gray-800">@{user.username}</p>
-                          <p className="text-xs text-gray-400 mt-0.5">via {user.agentName}</p>
-                          <button onClick={() => showPaymentHistory(user.paymentHistory)} className="text-[10px] text-blue-500 hover:underline mt-1 font-semibold">
-                            View History 📜
-                          </button>
-                        </td>
-                        <td className="px-6 py-4 font-medium text-gray-600">{user.totalViews.toLocaleString()}</td>
-                        <td className="px-6 py-4 font-mono text-gray-500 tracking-tight">{user.bankDetails}</td>
-                        <td className="px-6 py-4 font-medium text-gray-600">₹{user.totalEarned}</td>
-                        <td className="px-6 py-4">
-                          <span className={`font-bold px-2 py-1 rounded-md ${user.pendingAmount > 0 ? 'text-rose-600 bg-rose-50' : 'text-gray-400'}`}>
-                            ₹{user.pendingAmount}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 text-center">
-                          {user.pendingAmount > 0 ? (
-                            <button onClick={() => handleUserPay(user.id)} className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-1.5 rounded-lg text-xs font-semibold transition active:scale-95 shadow-sm">
-                              Pay Now
+                    users.map((user, index) => {
+                      const pendingNum = Number(user.pendingAmount);
+                      return (
+                        <tr key={index} className="hover:bg-gray-50 transition-colors">
+                          <td className="px-6 py-4">
+                            <p className="font-bold text-gray-800">@{user.username}</p>
+                            <p className="text-xs text-gray-400 mt-0.5">via {user.agentName}</p>
+                            <button onClick={() => showPaymentHistory(user.paymentHistory)} className="text-[10px] text-blue-500 hover:underline mt-1 font-semibold">
+                              View History 📜
                             </button>
-                          ) : (
-                            <span className="text-gray-400 text-xs font-medium flex items-center justify-center"><CheckCircle size={14} className="mr-1"/> Cleared</span>
-                          )}
-                        </td>
-                      </tr>
-                    ))
+                          </td>
+                          <td className="px-6 py-4 font-medium text-gray-600">{user.totalViews.toLocaleString()}</td>
+                          <td className="px-6 py-4 font-mono text-gray-500 tracking-tight">{user.bankDetails}</td>
+                          {/* Yahan par 4 decimal points dikha raha hu taaki clear rahe agar micro paise ban rahe hain */}
+                          <td className="px-6 py-4 font-medium text-gray-600">₹{Number(user.totalEarned).toFixed(4)}</td>
+                          <td className="px-6 py-4">
+                            <span className={`font-bold px-2 py-1 rounded-md ${pendingNum > 0 ? 'text-rose-600 bg-rose-50' : 'text-gray-400'}`}>
+                              ₹{pendingNum.toFixed(4)}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-center">
+                            {pendingNum > 0 ? (
+                              <button onClick={() => handleUserPay(user.id)} className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-1.5 rounded-lg text-xs font-semibold transition active:scale-95 shadow-sm">
+                                Pay Now
+                              </button>
+                            ) : (
+                              <span className="text-gray-400 text-xs font-medium flex items-center justify-center"><CheckCircle size={14} className="mr-1"/> Cleared</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>
@@ -396,8 +401,8 @@ const Dashboard = ({ token, onLogout }) => {
             <div className="flex items-center">
               <div className="p-3 bg-gray-100 text-gray-600 rounded-xl mr-4"><Archive size={24} /></div>
               <div>
-                <h2 className="text-xl font-bold text-gray-800">Past Weeks Data</h2>
-                <p className="text-sm text-gray-500 mt-0.5">Search previously cleared videos by Username or Agent.</p>
+                <h2 className="text-xl font-bold text-gray-800">Past Weeks Data (Archive & Rejected)</h2>
+                <p className="text-sm text-gray-500 mt-0.5">Search previously cleared or rejected videos by Username or Agent.</p>
               </div>
             </div>
             <button 
@@ -427,14 +432,26 @@ const Dashboard = ({ token, onLogout }) => {
                 ) : (
                   filteredHistory.map(video => {
                     const parentAgent = users.find(u => u.username.toLowerCase() === video.instaUsername.toLowerCase())?.agentName || "Unknown";
+                    const isRejected = video.status === 'Rejected';
+
                     return (
-                      <div key={video._id} className="border border-gray-200 bg-white rounded-xl p-4 shadow-sm hover:border-blue-200 transition">
+                      <div key={video._id} className={`border ${isRejected ? 'border-red-200 bg-red-50' : 'border-gray-200 bg-white'} rounded-xl p-4 shadow-sm transition`}>
                         <div className="flex justify-between items-center mb-2">
                           <p className="font-bold text-gray-800 text-sm">@{video.instaUsername}</p>
-                          <span className="text-[10px] font-bold bg-gray-100 text-gray-600 px-2 py-1 rounded-full">{video.views} Views</span>
+                          <span className={`text-[10px] font-bold px-2 py-1 rounded-full ${isRejected ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-600'}`}>
+                            {isRejected ? 'REJECTED' : `${video.views} Views`}
+                          </span>
                         </div>
-                        <p className="text-xs text-gray-500 font-medium mb-3">Agent: <span className="text-gray-700">{parentAgent}</span></p>
-                        <a href={video.videoLink} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline text-xs truncate block bg-gray-50 p-2 rounded">
+                        <p className="text-xs text-gray-500 font-medium mb-2">Agent: <span className="text-gray-700">{parentAgent}</span></p>
+                        
+                        {/* Show rejection reason if available */}
+                        {isRejected && video.rejectionReason && (
+                           <p className="text-xs text-red-600 font-semibold mb-2 bg-red-100 p-1.5 rounded">
+                             Reason: {video.rejectionReason}
+                           </p>
+                        )}
+
+                        <a href={video.videoLink} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline text-xs truncate block bg-white/50 border border-gray-100 p-2 rounded">
                           {video.videoLink}
                         </a>
                       </div>
