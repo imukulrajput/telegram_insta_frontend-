@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Key, Users, Instagram, TrendingUp, Copy, Video, CheckCircle, LogOut, RefreshCw, Archive, Search, Activity, Wallet, ShieldCheck } from 'lucide-react';
+import { Key, Users, Instagram, TrendingUp, Copy, Video, CheckCircle, LogOut, RefreshCw, Archive, Search, Activity, Wallet, ShieldCheck, X } from 'lucide-react';
 
-// JWT Decode Function to securely check user role
 const getUserRole = (token) => {
   try {
     const payload = JSON.parse(atob(token.split('.')[1]));
@@ -27,6 +26,9 @@ const Dashboard = ({ token, onLogout }) => {
   const [viewsInput, setViewsInput] = useState({});
   const [fetchingViews, setFetchingViews] = useState({});
 
+  // NAYA STATE: History Modal ke liye
+  const [historyModal, setHistoryModal] = useState({ isOpen: false, user: null, type: '' });
+
   const API_BASE_URL = 'https://telegrambot.myworkonline.in';
   const axiosConfig = { headers: { Authorization: `Bearer ${token}` } };
 
@@ -42,7 +44,6 @@ const Dashboard = ({ token, onLogout }) => {
       }
     } catch (error) {
       if (error.response?.status === 401 || error.response?.status === 403) onLogout();
-      console.error("Error fetching data:", error);
     }
   };
 
@@ -133,11 +134,9 @@ const Dashboard = ({ token, onLogout }) => {
     }
   };
 
-  const showPaymentHistory = (history) => {
-      if (!history || history.length === 0) return alert("No past payments.");
-      const text = history.map(h => `✅ ₹${Number(h.amount).toFixed(2)} on ${new Date(h.date).toLocaleDateString()}`).join('\n');
-      alert(`📜 Payment History:\n\n${text}`);
-  };
+  // NAYA FUNCTION: Modal Open/Close ke liye
+  const openHistoryModal = (user, type) => setHistoryModal({ isOpen: true, user, type });
+  const closeHistoryModal = () => setHistoryModal({ isOpen: false, user: null, type: '' });
 
   const copyToClipboard = () => { navigator.clipboard.writeText(newToken); alert('Token copied!'); };
   const totalPending = agents.reduce((sum, a) => sum + Number(a.pendingAmount), 0) + users.reduce((sum, u) => sum + Number(u.pendingAmount), 0);
@@ -164,7 +163,7 @@ const Dashboard = ({ token, onLogout }) => {
         </div>
       </nav>
 
-      <div className="max-w-7xl mx-auto px-6 py-8 space-y-8">
+      <div className="max-w-7xl mx-auto px-6 py-8 space-y-8 relative">
         
         {/* STATS CARDS (Super Admin Only) */}
         {isSuperAdmin && (
@@ -209,7 +208,7 @@ const Dashboard = ({ token, onLogout }) => {
           </div>
         )}
 
-        {/* WEEKLY VIDEOS SECTION (Visible to BOTH) */}
+        {/* WEEKLY VIDEOS SECTION */}
         <div className="bg-white rounded-2xl shadow-sm border border-blue-100 overflow-hidden">
           <div className="px-6 py-5 border-b border-gray-100 bg-gradient-to-r from-blue-50 to-white flex flex-col md:flex-row justify-between items-center">
             <div>
@@ -262,93 +261,142 @@ const Dashboard = ({ token, onLogout }) => {
           </div>
         </div>
 
-        {/* PAYMENTS & HISTORY SECTION (Super Admin Only) */}
+        {/* PAYMENTS SECTION (Super Admin Only) */}
         {isSuperAdmin && (
-          <>
-            <div className="grid grid-cols-1 gap-8 mt-8">
-              {/* Agents Table */}
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-                <div className="px-6 py-5 border-b border-gray-100 flex items-center"><div className="p-2 bg-purple-100 text-purple-600 rounded-lg mr-3"><Users size={20} /></div><h2 className="text-lg font-bold text-gray-800">Agent Payouts</h2></div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse">
-                    <thead className="bg-gray-50/80 text-gray-500 text-xs uppercase tracking-wider font-semibold">
-                      <tr><th className="px-6 py-4">Name</th><th className="px-6 py-4">Accounts</th><th className="px-6 py-4">Bank Details</th><th className="px-6 py-4">Earned</th><th className="px-6 py-4">Paid</th><th className="px-6 py-4">Pending</th><th className="px-6 py-4 text-center">Action</th></tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100 text-sm">
-                      {agents.length === 0 ? <tr><td colSpan="7" className="px-6 py-8 text-center text-gray-400">No agents registered yet.</td></tr> : agents.map((agent, index) => (
-                        <tr key={index} className="hover:bg-gray-50">
-                            <td className="px-6 py-4 font-bold text-gray-800">{agent.name}</td>
-                            <td className="px-6 py-4"><span className="bg-gray-100 text-gray-600 px-2.5 py-1 rounded-full text-xs font-bold">{agent.accountsAdded}</span></td>
-                            <td className="px-6 py-4 font-mono text-gray-500">{agent.bankDetails}</td>
-                            <td className="px-6 py-4 font-medium text-gray-600">₹{Number(agent.totalEarned).toFixed(2)}</td>
-                            <td className="px-6 py-4"><span className="text-emerald-600 font-semibold bg-emerald-50 px-2 py-1 rounded-md">₹{Number(agent.paidAmount).toFixed(2)}</span></td>
-                            <td className="px-6 py-4"><span className={`font-bold px-2 py-1 rounded-md ${Number(agent.pendingAmount) > 0 ? 'text-rose-600 bg-rose-50' : 'text-gray-400'}`}>₹{Number(agent.pendingAmount).toFixed(2)}</span></td>
-                            <td className="px-6 py-4 text-center">{Number(agent.pendingAmount) > 0 ? (<button onClick={() => handleAgentPay(agent.id)} className="bg-gray-900 hover:bg-black text-white px-4 py-1.5 rounded-lg text-xs font-semibold">Mark Paid</button>) : (<span className="text-gray-400 text-xs flex items-center justify-center"><CheckCircle size={14} className="mr-1"/> Cleared</span>)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {/* Creators Table */}
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-                <div className="px-6 py-5 border-b border-gray-100 flex items-center"><div className="p-2 bg-pink-100 text-pink-600 rounded-lg mr-3"><Instagram size={20} /></div><h2 className="text-lg font-bold text-gray-800">Creator Payouts</h2></div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse">
-                    <thead className="bg-gray-50/80 text-gray-500 text-xs uppercase tracking-wider font-semibold">
-                      <tr><th className="px-6 py-4">Username & Agent</th><th className="px-6 py-4">Total Views</th><th className="px-6 py-4">Bank Details</th><th className="px-6 py-4">Earned</th><th className="px-6 py-4">Pending</th><th className="px-6 py-4 text-center">Action</th></tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100 text-sm">
-                      {users.length === 0 ? <tr><td colSpan="6" className="px-6 py-8 text-center text-gray-400">No creators found.</td></tr> : users.map((user, index) => {
-                        const pendingNum = Number(user.pendingAmount);
-                        return (
-                          <tr key={index} className="hover:bg-gray-50">
-                            <td className="px-6 py-4"><p className="font-bold text-gray-800">@{user.username}</p><p className="text-xs text-gray-400 mt-0.5">via {user.agentName}</p><button onClick={() => showPaymentHistory(user.paymentHistory)} className="text-[10px] text-blue-500 hover:underline mt-1 font-semibold">View History 📜</button></td>
-                            <td className="px-6 py-4 font-medium text-gray-600">{user.totalViews.toLocaleString()}</td>
-                            <td className="px-6 py-4 font-mono text-gray-500">{user.bankDetails}</td>
-                            <td className="px-6 py-4 font-medium text-gray-600">₹{Number(user.totalEarned).toFixed(4)}</td>
-                            <td className="px-6 py-4"><span className={`font-bold px-2 py-1 rounded-md ${pendingNum > 0 ? 'text-rose-600 bg-rose-50' : 'text-gray-400'}`}>₹{pendingNum.toFixed(4)}</span></td>
-                            <td className="px-6 py-4 text-center">{pendingNum > 0 ? (<button onClick={() => handleUserPay(user.id)} className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-1.5 rounded-lg text-xs font-semibold">Pay Now</button>) : (<span className="text-gray-400 text-xs flex items-center justify-center"><CheckCircle size={14} className="mr-1"/> Cleared</span>)}</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-
-            {/* History Section */}
-            <div className="mt-8 bg-white border border-gray-100 rounded-2xl p-8 shadow-sm">
-              <div className="flex flex-col md:flex-row justify-between items-center mb-6">
-                <div className="flex items-center"><div className="p-3 bg-gray-100 text-gray-600 rounded-xl mr-4"><Archive size={24} /></div><div><h2 className="text-xl font-bold text-gray-800">Past Weeks Data (Archive & Rejected)</h2></div></div>
-                <button onClick={fetchHistory} className="mt-4 md:mt-0 bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 px-6 py-2.5 rounded-lg font-medium shadow-sm">{showHistory ? "Close History Viewer" : "Load Video History"}</button>
-              </div>
-              {showHistory && (
-                <div className="space-y-6 border-t border-gray-100 pt-6">
-                  <div className="relative max-w-md"><Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} /><input type="text" placeholder="Search by @username or Agent..." className="w-full pl-11 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} /></div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 max-h-[500px] overflow-y-auto pr-2 pb-2">
-                    {filteredHistory.length === 0 ? <p className="text-gray-400 col-span-full py-8 text-center bg-gray-50 rounded-xl">No historical videos found.</p> : filteredHistory.map(video => {
-                      const parentAgent = users.find(u => u.username.toLowerCase() === video.instaUsername.toLowerCase())?.agentName || "Unknown";
-                      const isRejected = video.status === 'Rejected';
+          <div className="grid grid-cols-1 gap-8 mt-8">
+            {/* Creators Table */}
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+              <div className="px-6 py-5 border-b border-gray-100 flex items-center"><div className="p-2 bg-pink-100 text-pink-600 rounded-lg mr-3"><Instagram size={20} /></div><h2 className="text-lg font-bold text-gray-800">Creator Payouts</h2></div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead className="bg-gray-50/80 text-gray-500 text-xs uppercase tracking-wider font-semibold">
+                    <tr><th className="px-6 py-4">Username & Agent</th><th className="px-6 py-4">Lifetime Views</th><th className="px-6 py-4">Bank Details</th><th className="px-6 py-4">Earned</th><th className="px-6 py-4">Pending</th><th className="px-6 py-4 text-center">Action</th></tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 text-sm">
+                    {users.map((user, index) => {
+                      const pendingNum = Number(user.pendingAmount);
                       return (
-                        <div key={video._id} className={`border ${isRejected ? 'border-red-200 bg-red-50' : 'border-gray-200 bg-white'} rounded-xl p-4 shadow-sm`}>
-                            <div className="flex justify-between items-center mb-2"><p className="font-bold text-gray-800 text-sm">@{video.instaUsername}</p><span className={`text-[10px] font-bold px-2 py-1 rounded-full ${isRejected ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-600'}`}>{isRejected ? 'REJECTED' : `${video.views} Views`}</span></div>
-                            <p className="text-xs text-gray-500 font-medium mb-2">Agent: <span className="text-gray-700">{parentAgent}</span></p>
-                            {isRejected && video.rejectionReason && (<p className="text-xs text-red-600 font-semibold mb-2 bg-red-100 p-1.5 rounded">Reason: {video.rejectionReason}</p>)}
-                            <a href={video.videoLink} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline text-xs truncate block bg-white/50 border border-gray-100 p-2 rounded">{video.videoLink}</a>
-                        </div>
-                      )
+                        <tr key={index} className="hover:bg-gray-50">
+                          <td className="px-6 py-4">
+                            <p className="font-bold text-gray-800 text-base">@{user.username}</p>
+                            <p className="text-xs text-gray-400 mt-0.5 mb-1">via {user.agentName}</p>
+                            {/* NAYA BUTTON HISTORY MODAL KE LIYE */}
+                            <button onClick={() => openHistoryModal(user, 'creator')} className="text-xs font-semibold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded transition">
+                              View Detailed History
+                            </button>
+                          </td>
+                          <td className="px-6 py-4 font-bold text-gray-700">{user.totalViews.toLocaleString()}</td>
+                          <td className="px-6 py-4 font-mono text-gray-500">{user.bankDetails}</td>
+                          <td className="px-6 py-4 font-medium text-gray-600">₹{Number(user.totalEarned).toFixed(4)}</td>
+                          <td className="px-6 py-4"><span className={`font-bold px-2 py-1 rounded-md ${pendingNum > 0 ? 'text-rose-600 bg-rose-50' : 'text-gray-400'}`}>₹{pendingNum.toFixed(4)}</span></td>
+                          <td className="px-6 py-4 text-center">
+                            {pendingNum > 0.0001 ? (
+                              <button onClick={() => handleUserPay(user.id)} className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-1.5 rounded-lg text-xs font-semibold shadow-sm transition active:scale-95">Pay Now</button>
+                            ) : (
+                              <span className="text-gray-400 text-xs font-medium flex items-center justify-center"><CheckCircle size={14} className="mr-1"/> Cleared</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
                     })}
-                  </div>
-                </div>
-              )}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </>
+            
+            {/* Agents Table */}
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+              <div className="px-6 py-5 border-b border-gray-100 flex items-center"><div className="p-2 bg-purple-100 text-purple-600 rounded-lg mr-3"><Users size={20} /></div><h2 className="text-lg font-bold text-gray-800">Agent Payouts</h2></div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead className="bg-gray-50/80 text-gray-500 text-xs uppercase tracking-wider font-semibold">
+                    <tr><th className="px-6 py-4">Name</th><th className="px-6 py-4">Accounts</th><th className="px-6 py-4">Bank Details</th><th className="px-6 py-4">Earned</th><th className="px-6 py-4">Paid</th><th className="px-6 py-4">Pending</th><th className="px-6 py-4 text-center">Action</th></tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 text-sm">
+                    {agents.map((agent, index) => (
+                      <tr key={index} className="hover:bg-gray-50">
+                          <td className="px-6 py-4 font-bold text-gray-800">{agent.name}</td>
+                          <td className="px-6 py-4"><span className="bg-gray-100 text-gray-600 px-2.5 py-1 rounded-full text-xs font-bold">{agent.accountsAdded}</span></td>
+                          <td className="px-6 py-4 font-mono text-gray-500">{agent.bankDetails}</td>
+                          <td className="px-6 py-4 font-medium text-gray-600">₹{Number(agent.totalEarned).toFixed(2)}</td>
+                          <td className="px-6 py-4"><span className="text-emerald-600 font-semibold bg-emerald-50 px-2 py-1 rounded-md">₹{Number(agent.paidAmount).toFixed(2)}</span></td>
+                          <td className="px-6 py-4"><span className={`font-bold px-2 py-1 rounded-md ${Number(agent.pendingAmount) > 0 ? 'text-rose-600 bg-rose-50' : 'text-gray-400'}`}>₹{Number(agent.pendingAmount).toFixed(2)}</span></td>
+                          <td className="px-6 py-4 text-center">{Number(agent.pendingAmount) > 0 ? (<button onClick={() => handleAgentPay(agent.id)} className="bg-gray-900 hover:bg-black text-white px-4 py-1.5 rounded-lg text-xs font-semibold">Mark Paid</button>) : (<span className="text-gray-400 text-xs flex items-center justify-center"><CheckCircle size={14} className="mr-1"/> Cleared</span>)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
         )}
 
       </div>
+
+      {/* --- PREMIUM HISTORY MODAL --- */}
+      {historyModal.isOpen && historyModal.user && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden relative">
+            
+            {/* Modal Header */}
+            <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-6 text-white relative">
+              <button onClick={closeHistoryModal} className="absolute top-4 right-4 p-1 hover:bg-white/20 rounded-full transition">
+                <X size={24} />
+              </button>
+              <h3 className="text-2xl font-black mb-1">@{historyModal.user.username}</h3>
+              <p className="text-blue-100 text-sm font-medium">Payment & View History Log</p>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 bg-gray-50/50">
+              
+              <div className="flex justify-between items-center mb-6 bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
+                <div className="text-center">
+                  <p className="text-xs text-gray-500 font-bold uppercase tracking-wider mb-1">Lifetime Views</p>
+                  <p className="text-xl font-black text-blue-600">{historyModal.user.totalViews.toLocaleString()}</p>
+                </div>
+                <div className="w-px h-10 bg-gray-200"></div>
+                <div className="text-center">
+                  <p className="text-xs text-gray-500 font-bold uppercase tracking-wider mb-1">Total Paid</p>
+                  <p className="text-xl font-black text-emerald-600">₹{Number(historyModal.user.paidAmount).toFixed(4)}</p>
+                </div>
+              </div>
+
+              <h4 className="text-sm font-bold text-gray-700 mb-3 border-b border-gray-200 pb-2">Past Transactions</h4>
+              
+              <div className="max-h-64 overflow-y-auto pr-2 space-y-3">
+                {(!historyModal.user.paymentHistory || historyModal.user.paymentHistory.length === 0) ? (
+                  <div className="text-center py-8 text-gray-400 font-medium bg-white rounded-xl border border-dashed border-gray-200">
+                    No payment history found yet.
+                  </div>
+                ) : (
+                  [...historyModal.user.paymentHistory].reverse().map((record, idx) => (
+                    <div key={idx} className="flex justify-between items-center bg-white p-4 rounded-xl border border-gray-100 shadow-sm hover:border-blue-200 transition">
+                      <div className="flex items-center">
+                        <div className="bg-emerald-100 text-emerald-600 p-2 rounded-full mr-3">
+                          <CheckCircle size={18} />
+                        </div>
+                        <div>
+                          <p className="font-bold text-gray-800">Payment Cleared</p>
+                          <p className="text-xs text-gray-500 font-medium">{new Date(record.date).toLocaleString()}</p>
+                        </div>
+                      </div>
+                      <p className="font-black text-emerald-600">₹{Number(record.amount).toFixed(4)}</p>
+                    </div>
+                  ))
+                )}
+              </div>
+              
+              <div className="mt-6">
+                <button onClick={closeHistoryModal} className="w-full py-3 bg-gray-900 hover:bg-black text-white font-bold rounded-xl transition active:scale-95">
+                  Close Window
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };
