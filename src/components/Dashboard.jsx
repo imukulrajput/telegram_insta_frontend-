@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Key, Users, Instagram, TrendingUp, Copy, Video, CheckCircle, LogOut, RefreshCw, Archive, Search, Activity, Wallet, ShieldCheck, X } from 'lucide-react';
+import { Key, Users, Instagram, TrendingUp, Copy, Video, CheckCircle, LogOut, RefreshCw, Archive, Search, Activity, Wallet, ShieldCheck, ArrowLeft, Calendar, CreditCard, PlaySquare } from 'lucide-react';
 
 const getUserRole = (token) => {
   try {
@@ -16,18 +16,16 @@ const Dashboard = ({ token, onLogout }) => {
   const [agents, setAgents] = useState([]);
   const [users, setUsers] = useState([]);
   const [activeVideos, setActiveVideos] = useState([]);
-  
   const [archivedVideos, setArchivedVideos] = useState([]);
-  const [showHistory, setShowHistory] = useState(false);
+  
   const [searchQuery, setSearchQuery] = useState('');
-
   const [newToken, setNewToken] = useState('');
   const [loading, setLoading] = useState(false);
   const [viewsInput, setViewsInput] = useState({});
   const [fetchingViews, setFetchingViews] = useState({});
 
-  // NAYA STATE: History Modal ke liye
-  const [historyModal, setHistoryModal] = useState({ isOpen: false, user: null, type: '' });
+  // NAYA STATE: Dedicated Page Switcher ke liye
+  const [detailedUserId, setDetailedUserId] = useState(null);
 
   const API_BASE_URL = 'https://telegrambot.myworkonline.in';
   const axiosConfig = { headers: { Authorization: `Bearer ${token}` } };
@@ -41,6 +39,10 @@ const Dashboard = ({ token, onLogout }) => {
         const paymentsRes = await axios.get(`${API_BASE_URL}/admin/payments`, axiosConfig);
         setAgents(paymentsRes.data.agentPayments);
         setUsers(paymentsRes.data.userPayments);
+        
+        // Background mein history bhi fetch kar lo taaki Creator Page par videos dikh sakein
+        const historyRes = await axios.get(`${API_BASE_URL}/admin/videos/archived`, axiosConfig);
+        setArchivedVideos(historyRes.data);
       }
     } catch (error) {
       if (error.response?.status === 401 || error.response?.status === 403) onLogout();
@@ -101,25 +103,6 @@ const Dashboard = ({ token, onLogout }) => {
     } catch (error) { console.error("Error:", error); }
   };
 
-  const fetchHistory = async () => {
-    if (!showHistory) {
-      try {
-        const res = await axios.get(`${API_BASE_URL}/admin/videos/archived`, axiosConfig);
-        setArchivedVideos(res.data);
-      } catch (error) { console.error("Error:", error); }
-    }
-    setShowHistory(!showHistory);
-  };
-
-  const filteredHistory = archivedVideos.filter(video => {
-    if (!searchQuery) return true;
-    const search = searchQuery.toLowerCase();
-    const vUser = video.instaUsername.toLowerCase();
-    const userProfile = users.find(u => u.username.toLowerCase() === vUser);
-    const agentName = userProfile ? userProfile.agentName.toLowerCase() : "";
-    return vUser.includes(search) || agentName.includes(search);
-  });
-
   const handleAgentPay = async (agentId) => {
     if (window.confirm("Mark this Agent's pending amount as PAID?")) {
       await axios.post(`${API_BASE_URL}/admin/agents/${agentId}/pay`, {}, axiosConfig);
@@ -134,13 +117,169 @@ const Dashboard = ({ token, onLogout }) => {
     }
   };
 
-  // NAYA FUNCTION: Modal Open/Close ke liye
-  const openHistoryModal = (user, type) => setHistoryModal({ isOpen: true, user, type });
-  const closeHistoryModal = () => setHistoryModal({ isOpen: false, user: null, type: '' });
-
   const copyToClipboard = () => { navigator.clipboard.writeText(newToken); alert('Token copied!'); };
   const totalPending = agents.reduce((sum, a) => sum + Number(a.pendingAmount), 0) + users.reduce((sum, u) => sum + Number(u.pendingAmount), 0);
 
+  // --- DEDICATED CREATOR PAGE RENDERER ---
+  if (detailedUserId && isSuperAdmin) {
+    const creator = users.find(u => u.id === detailedUserId);
+    if (!creator) return setDetailedUserId(null); // Fallback if user deleted
+
+    // Merge active and archived videos for this specific user
+    const userActiveVideos = activeVideos.filter(v => v.instaUsername.toLowerCase() === creator.username.toLowerCase());
+    const userArchivedVideos = archivedVideos.filter(v => v.instaUsername.toLowerCase() === creator.username.toLowerCase());
+    const allCreatorVideos = [...userActiveVideos, ...userArchivedVideos].sort((a, b) => b._id.localeCompare(a._id)); // Newest first
+
+    return (
+      <div className="min-h-screen bg-gray-50 font-sans text-gray-800 pb-12">
+        {/* Detail Page Header */}
+        <nav className="bg-white shadow-sm border-b border-gray-100 sticky top-0 z-10">
+          <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
+            <button 
+              onClick={() => setDetailedUserId(null)} 
+              className="flex items-center text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-4 py-2 rounded-xl transition-all font-bold"
+            >
+              <ArrowLeft size={18} className="mr-2" /> Back to Dashboard
+            </button>
+            <h1 className="text-xl font-black text-gray-800">Creator Profile</h1>
+          </div>
+        </nav>
+
+        <div className="max-w-7xl mx-auto px-6 py-8 space-y-8 animate-fade-in-down">
+          
+          {/* Creator Profile Card */}
+          <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-8 flex flex-col md:flex-row justify-between items-start md:items-center">
+            <div className="flex items-center mb-6 md:mb-0">
+              <div className="bg-gradient-to-br from-pink-500 to-purple-600 p-4 rounded-2xl text-white shadow-lg mr-5">
+                <Instagram size={40} />
+              </div>
+              <div>
+                <h2 className="text-3xl font-black text-gray-900">@{creator.username}</h2>
+                <div className="flex items-center text-gray-500 mt-1 font-medium">
+                  <Users size={16} className="mr-1" /> Added via Agent: <span className="text-gray-800 ml-1">{creator.agentName}</span>
+                </div>
+                <div className="flex items-center text-gray-500 mt-1 font-medium">
+                  <CreditCard size={16} className="mr-1" /> Bank Info: <span className="font-mono text-gray-800 ml-1 bg-gray-100 px-2 py-0.5 rounded">{creator.bankDetails}</span>
+                </div>
+              </div>
+            </div>
+            
+            {/* Quick Pay Action */}
+            <div className="bg-gray-50 border border-gray-200 p-5 rounded-2xl w-full md:w-auto text-center md:text-right">
+              <p className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-1">Current Pending</p>
+              <h3 className="text-3xl font-black text-rose-600 mb-3">₹{Number(creator.pendingAmount).toFixed(4)}</h3>
+              {Number(creator.pendingAmount) > 0.0001 ? (
+                <button onClick={() => handleUserPay(creator.id)} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-xl font-bold shadow-md transition active:scale-95">
+                  Process Payment Now
+                </button>
+              ) : (
+                <div className="w-full bg-gray-200 text-gray-500 px-6 py-2.5 rounded-xl font-bold flex items-center justify-center">
+                  <CheckCircle size={18} className="mr-2" /> All Dues Cleared
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* KPI Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+              <p className="text-sm font-bold text-gray-500 uppercase tracking-wider">Lifetime Views</p>
+              <h3 className="text-3xl font-black text-blue-600 mt-1">{creator.totalViews.toLocaleString()}</h3>
+            </div>
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+              <p className="text-sm font-bold text-gray-500 uppercase tracking-wider">Total Earned</p>
+              <h3 className="text-3xl font-black text-gray-800 mt-1">₹{Number(creator.totalEarned).toFixed(4)}</h3>
+            </div>
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+              <p className="text-sm font-bold text-gray-500 uppercase tracking-wider">Total Paid Successfully</p>
+              <h3 className="text-3xl font-black text-emerald-600 mt-1">₹{Number(creator.paidAmount).toFixed(4)}</h3>
+            </div>
+          </div>
+
+          {/* Split Layout: Videos (Left) & Payment History (Right) */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            
+            {/* Payment History Log */}
+            <div className="lg:col-span-1 bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden flex flex-col h-[600px]">
+              <div className="p-6 border-b border-gray-100 bg-gray-50">
+                <h3 className="text-lg font-bold text-gray-800 flex items-center"><Calendar className="mr-2 text-emerald-600" size={20}/> Payment History</h3>
+              </div>
+              <div className="p-6 overflow-y-auto flex-1 space-y-4">
+                {(!creator.paymentHistory || creator.paymentHistory.length === 0) ? (
+                  <div className="text-center py-10">
+                    <div className="bg-gray-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-3"><Wallet className="text-gray-300" size={24}/></div>
+                    <p className="text-gray-500 font-medium">No payments processed yet.</p>
+                  </div>
+                ) : (
+                  [...creator.paymentHistory].reverse().map((record, idx) => (
+                    <div key={idx} className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm hover:border-emerald-200 transition">
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-md">Paid</span>
+                        <span className="text-xs font-bold text-gray-500">{new Date(record.date).toLocaleDateString()}</span>
+                      </div>
+                      <h4 className="text-xl font-black text-gray-800 mt-2">₹{Number(record.amount).toFixed(4)}</h4>
+                      <p className="text-xs text-gray-400 mt-1">{new Date(record.date).toLocaleTimeString()}</p>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* Video Submission Log */}
+            <div className="lg:col-span-2 bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden flex flex-col h-[600px]">
+              <div className="p-6 border-b border-gray-100 bg-gray-50">
+                <h3 className="text-lg font-bold text-gray-800 flex items-center"><PlaySquare className="mr-2 text-blue-600" size={20}/> All Submitted Videos</h3>
+              </div>
+              <div className="p-0 overflow-y-auto flex-1">
+                <table className="w-full text-left border-collapse">
+                  <thead className="bg-white sticky top-0 border-b border-gray-100 shadow-sm z-10">
+                    <tr>
+                      <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Video Link</th>
+                      <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Status</th>
+                      <th className="px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider text-right">Saved Views</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {allCreatorVideos.length === 0 ? (
+                      <tr><td colSpan="3" className="px-6 py-12 text-center text-gray-400 font-medium">No videos submitted by this creator.</td></tr>
+                    ) : (
+                      allCreatorVideos.map((video) => {
+                        const isRejected = video.status === 'Rejected';
+                        const isActive = video.status !== 'Archived' && !isRejected;
+                        return (
+                          <tr key={video._id} className={`hover:bg-gray-50 transition ${isRejected ? 'bg-red-50/30' : ''}`}>
+                            <td className="px-6 py-4">
+                              <a href={video.videoLink} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800 hover:underline text-sm font-medium block truncate max-w-[250px]">
+                                {video.videoLink}
+                              </a>
+                              {isRejected && video.rejectionReason && (
+                                <p className="text-xs text-red-600 mt-1 font-semibold">Reason: {video.rejectionReason}</p>
+                              )}
+                            </td>
+                            <td className="px-6 py-4">
+                              {isActive && <span className="bg-blue-100 text-blue-700 text-xs font-bold px-2.5 py-1 rounded-md">Active (This Week)</span>}
+                              {video.status === 'Archived' && <span className="bg-gray-100 text-gray-600 text-xs font-bold px-2.5 py-1 rounded-md">Archived</span>}
+                              {isRejected && <span className="bg-red-100 text-red-700 text-xs font-bold px-2.5 py-1 rounded-md">Rejected</span>}
+                            </td>
+                            <td className="px-6 py-4 text-right font-bold text-gray-800">
+                              {video.views.toLocaleString()}
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // --- MAIN DASHBOARD RENDERER ---
   return (
     <div className="min-h-screen bg-gray-50 font-sans text-gray-800">
       
@@ -163,7 +302,7 @@ const Dashboard = ({ token, onLogout }) => {
         </div>
       </nav>
 
-      <div className="max-w-7xl mx-auto px-6 py-8 space-y-8 relative">
+      <div className="max-w-7xl mx-auto px-6 py-8 space-y-8">
         
         {/* STATS CARDS (Super Admin Only) */}
         {isSuperAdmin && (
@@ -208,7 +347,7 @@ const Dashboard = ({ token, onLogout }) => {
           </div>
         )}
 
-        {/* WEEKLY VIDEOS SECTION */}
+        {/* WEEKLY VIDEOS SECTION (Visible to BOTH) */}
         <div className="bg-white rounded-2xl shadow-sm border border-blue-100 overflow-hidden">
           <div className="px-6 py-5 border-b border-gray-100 bg-gradient-to-r from-blue-50 to-white flex flex-col md:flex-row justify-between items-center">
             <div>
@@ -264,25 +403,29 @@ const Dashboard = ({ token, onLogout }) => {
         {/* PAYMENTS SECTION (Super Admin Only) */}
         {isSuperAdmin && (
           <div className="grid grid-cols-1 gap-8 mt-8">
+            
             {/* Creators Table */}
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
               <div className="px-6 py-5 border-b border-gray-100 flex items-center"><div className="p-2 bg-pink-100 text-pink-600 rounded-lg mr-3"><Instagram size={20} /></div><h2 className="text-lg font-bold text-gray-800">Creator Payouts</h2></div>
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                   <thead className="bg-gray-50/80 text-gray-500 text-xs uppercase tracking-wider font-semibold">
-                    <tr><th className="px-6 py-4">Username & Agent</th><th className="px-6 py-4">Lifetime Views</th><th className="px-6 py-4">Bank Details</th><th className="px-6 py-4">Earned</th><th className="px-6 py-4">Pending</th><th className="px-6 py-4 text-center">Action</th></tr>
+                    <tr><th className="px-6 py-4">Creator Profile</th><th className="px-6 py-4">Total Views</th><th className="px-6 py-4">Bank Details</th><th className="px-6 py-4">Earned</th><th className="px-6 py-4">Pending</th><th className="px-6 py-4 text-center">Action</th></tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100 text-sm">
-                    {users.map((user, index) => {
+                    {users.length === 0 ? <tr><td colSpan="6" className="px-6 py-8 text-center text-gray-400">No creators found.</td></tr> : users.map((user, index) => {
                       const pendingNum = Number(user.pendingAmount);
                       return (
                         <tr key={index} className="hover:bg-gray-50">
                           <td className="px-6 py-4">
                             <p className="font-bold text-gray-800 text-base">@{user.username}</p>
-                            <p className="text-xs text-gray-400 mt-0.5 mb-1">via {user.agentName}</p>
-                            {/* NAYA BUTTON HISTORY MODAL KE LIYE */}
-                            <button onClick={() => openHistoryModal(user, 'creator')} className="text-xs font-semibold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded transition">
-                              View Detailed History
+                            <p className="text-xs text-gray-400 mt-0.5 mb-2">via {user.agentName}</p>
+                            {/* THE MAGIC BUTTON THAT OPENS THE FULL PAGE */}
+                            <button 
+                              onClick={() => setDetailedUserId(user.id)} 
+                              className="text-xs font-bold text-blue-600 hover:text-white bg-blue-50 hover:bg-blue-600 border border-blue-200 px-3 py-1.5 rounded-lg transition-all shadow-sm"
+                            >
+                              View Full Profile
                             </button>
                           </td>
                           <td className="px-6 py-4 font-bold text-gray-700">{user.totalViews.toLocaleString()}</td>
@@ -303,7 +446,7 @@ const Dashboard = ({ token, onLogout }) => {
                 </table>
               </div>
             </div>
-            
+
             {/* Agents Table */}
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
               <div className="px-6 py-5 border-b border-gray-100 flex items-center"><div className="p-2 bg-purple-100 text-purple-600 rounded-lg mr-3"><Users size={20} /></div><h2 className="text-lg font-bold text-gray-800">Agent Payouts</h2></div>
@@ -328,75 +471,11 @@ const Dashboard = ({ token, onLogout }) => {
                 </table>
               </div>
             </div>
+            
           </div>
         )}
 
       </div>
-
-      {/* --- PREMIUM HISTORY MODAL --- */}
-      {historyModal.isOpen && historyModal.user && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden relative">
-            
-            {/* Modal Header */}
-            <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-6 text-white relative">
-              <button onClick={closeHistoryModal} className="absolute top-4 right-4 p-1 hover:bg-white/20 rounded-full transition">
-                <X size={24} />
-              </button>
-              <h3 className="text-2xl font-black mb-1">@{historyModal.user.username}</h3>
-              <p className="text-blue-100 text-sm font-medium">Payment & View History Log</p>
-            </div>
-
-            {/* Modal Body */}
-            <div className="p-6 bg-gray-50/50">
-              
-              <div className="flex justify-between items-center mb-6 bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
-                <div className="text-center">
-                  <p className="text-xs text-gray-500 font-bold uppercase tracking-wider mb-1">Lifetime Views</p>
-                  <p className="text-xl font-black text-blue-600">{historyModal.user.totalViews.toLocaleString()}</p>
-                </div>
-                <div className="w-px h-10 bg-gray-200"></div>
-                <div className="text-center">
-                  <p className="text-xs text-gray-500 font-bold uppercase tracking-wider mb-1">Total Paid</p>
-                  <p className="text-xl font-black text-emerald-600">₹{Number(historyModal.user.paidAmount).toFixed(4)}</p>
-                </div>
-              </div>
-
-              <h4 className="text-sm font-bold text-gray-700 mb-3 border-b border-gray-200 pb-2">Past Transactions</h4>
-              
-              <div className="max-h-64 overflow-y-auto pr-2 space-y-3">
-                {(!historyModal.user.paymentHistory || historyModal.user.paymentHistory.length === 0) ? (
-                  <div className="text-center py-8 text-gray-400 font-medium bg-white rounded-xl border border-dashed border-gray-200">
-                    No payment history found yet.
-                  </div>
-                ) : (
-                  [...historyModal.user.paymentHistory].reverse().map((record, idx) => (
-                    <div key={idx} className="flex justify-between items-center bg-white p-4 rounded-xl border border-gray-100 shadow-sm hover:border-blue-200 transition">
-                      <div className="flex items-center">
-                        <div className="bg-emerald-100 text-emerald-600 p-2 rounded-full mr-3">
-                          <CheckCircle size={18} />
-                        </div>
-                        <div>
-                          <p className="font-bold text-gray-800">Payment Cleared</p>
-                          <p className="text-xs text-gray-500 font-medium">{new Date(record.date).toLocaleString()}</p>
-                        </div>
-                      </div>
-                      <p className="font-black text-emerald-600">₹{Number(record.amount).toFixed(4)}</p>
-                    </div>
-                  ))
-                )}
-              </div>
-              
-              <div className="mt-6">
-                <button onClick={closeHistoryModal} className="w-full py-3 bg-gray-900 hover:bg-black text-white font-bold rounded-xl transition active:scale-95">
-                  Close Window
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
     </div>
   );
 };
