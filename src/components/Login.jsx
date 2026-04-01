@@ -145,9 +145,7 @@ const Login = ({ onLoginSuccess }) => {
         </div>
       </div>
       
-      <p className="mt-8 text-sm text-gray-400 font-medium">
-        Secured by JWT Authentication 🔒
-      </p>
+    
     </div>
   );
 };
