@@ -28,12 +28,16 @@ const Dashboard = ({ token, onLogout }) => {
   const [detailedUserId, setDetailedUserId] = useState(null);
   const [showHistory, setShowHistory] = useState(false);
 
-  // Pagination States
+  // --- PAGINATION STATES ---
   const [creatorPage, setCreatorPage] = useState(1);
   const creatorsPerPage = 10;
   
   const [historyPage, setHistoryPage] = useState(1);
   const historyPerPage = 12;
+
+  // NAYA: Active Videos Pagination State
+  const [activeVideoPage, setActiveVideoPage] = useState(1);
+  const activeVideosPerPage = 6; // 6 videos per page (3x2 Grid)
 
   const API_BASE_URL = 'https://telegrambot.myworkonline.in';
   const axiosConfig = { headers: { Authorization: `Bearer ${token}` } };
@@ -48,7 +52,6 @@ const Dashboard = ({ token, onLogout }) => {
         setAgents(paymentsRes.data.agentPayments);
         setUsers(paymentsRes.data.userPayments);
         
-        // Background fetch for detailed page
         const historyRes = await axios.get(`${API_BASE_URL}/admin/videos/archived`, axiosConfig);
         setArchivedVideos(historyRes.data);
       }
@@ -59,7 +62,6 @@ const Dashboard = ({ token, onLogout }) => {
 
   useEffect(() => { fetchData(); }, [token]);
 
-  // Handle Search for History (Resets page to 1)
   const handleHistorySearch = (e) => {
     setSearchQuery(e.target.value);
     setHistoryPage(1);
@@ -105,6 +107,8 @@ const Dashboard = ({ token, onLogout }) => {
       await axios.post(`${API_BASE_URL}/admin/videos/${videoId}/reject`, { reason }, axiosConfig);
       alert("✅ Video Rejected & Notified!");
       fetchData(); 
+      // Reset page if needed
+      setActiveVideoPage(1);
     } catch (error) { console.error("Error:", error); }
   };
 
@@ -114,6 +118,7 @@ const Dashboard = ({ token, onLogout }) => {
       await axios.post(`${API_BASE_URL}/admin/videos/archive-all`, {}, axiosConfig);
       alert("✅ Dashboard cleared!");
       fetchData();
+      setActiveVideoPage(1);
     } catch (error) { console.error("Error:", error); }
   };
 
@@ -136,7 +141,7 @@ const Dashboard = ({ token, onLogout }) => {
       try {
         const res = await axios.get(`${API_BASE_URL}/admin/videos/archived`, axiosConfig);
         setArchivedVideos(res.data);
-        setHistoryPage(1); // Reset page on open
+        setHistoryPage(1); 
       } catch (error) { console.error("Error:", error); }
     }
     setShowHistory(!showHistory);
@@ -145,7 +150,7 @@ const Dashboard = ({ token, onLogout }) => {
   const copyToClipboard = () => { navigator.clipboard.writeText(newToken); alert('Token copied!'); };
   const totalPending = agents.reduce((sum, a) => sum + Number(a.pendingAmount), 0) + users.reduce((sum, u) => sum + Number(u.pendingAmount), 0);
 
-  // --- DEDICATED CREATOR PAGE RENDERER (Full Profile View) ---
+  // --- DEDICATED CREATOR PAGE RENDERER ---
   if (detailedUserId && isSuperAdmin) {
     const creator = users.find(u => u.id === detailedUserId);
     if (!creator) return setDetailedUserId(null); 
@@ -240,12 +245,21 @@ const Dashboard = ({ token, onLogout }) => {
     );
   }
 
-  // --- PAGINATION LOGIC ---
+  // --- PAGINATION LOGIC CALCULATIONS ---
+  
+  // 1. Creators Pagination
   const indexOfLastCreator = creatorPage * creatorsPerPage;
   const indexOfFirstCreator = indexOfLastCreator - creatorsPerPage;
   const currentCreators = users.slice(indexOfFirstCreator, indexOfLastCreator);
   const totalCreatorPages = Math.ceil(users.length / creatorsPerPage);
 
+  // 2. Active Videos Pagination (NAYA)
+  const indexOfLastActiveVideo = activeVideoPage * activeVideosPerPage;
+  const indexOfFirstActiveVideo = indexOfLastActiveVideo - activeVideosPerPage;
+  const currentActiveVideos = activeVideos.slice(indexOfFirstActiveVideo, indexOfLastActiveVideo);
+  const totalActiveVideoPages = Math.ceil(activeVideos.length / activeVideosPerPage);
+
+  // 3. History Pagination
   const filteredHistory = archivedVideos.filter(video => {
     if (!searchQuery) return true;
     const search = searchQuery.toLowerCase();
@@ -303,18 +317,18 @@ const Dashboard = ({ token, onLogout }) => {
           </div>
         )}
 
-        {/* WEEKLY VIDEOS SECTION */}
+        {/* WEEKLY VIDEOS SECTION (Now with Pagination) */}
         <div className="bg-white rounded-2xl shadow-sm border border-blue-100 overflow-hidden">
           <div className="px-6 py-5 border-b border-gray-100 bg-gradient-to-r from-blue-50 to-white flex flex-col md:flex-row justify-between items-center">
             <div><h2 className="text-lg font-bold text-blue-900 flex items-center"><Video className="mr-2 text-blue-600" /> Action Hub: Review Videos</h2>{!isSuperAdmin && <p className="text-sm text-gray-500 mt-1">Please fetch views or reject fake videos.</p>}</div>
             {isSuperAdmin && (<button onClick={handleWeeklyReset} className="mt-3 md:mt-0 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 px-4 py-2 rounded-lg text-sm font-semibold transition flex items-center"><Archive size={16} className="mr-2"/> End Week & Clear Dashboard</button>)}
           </div>
           <div className="p-6 bg-gray-50/50">
-            {activeVideos.length === 0 ? (
+            {currentActiveVideos.length === 0 ? (
               <div className="text-center py-10"><Video size={48} className="mx-auto text-gray-300 mb-3" /><p className="text-gray-500 font-medium">No videos pending review.</p></div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {activeVideos.map(video => (
+                {currentActiveVideos.map(video => (
                   <div key={video._id} className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow">
                     <div className="flex justify-between items-center mb-3"><p className="font-bold text-gray-800 text-lg">@{video.instaUsername}</p><span className="text-xs font-bold text-blue-700 bg-blue-50 px-3 py-1 rounded-full border border-blue-100">{video.views || 0} Views</span></div>
                     <a href={video.videoLink} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-700 hover:underline text-sm truncate block mb-5 bg-gray-50 p-2 rounded-md">{video.videoLink}</a>
@@ -330,6 +344,17 @@ const Dashboard = ({ token, onLogout }) => {
                 ))}
               </div>
             )}
+            
+            {/* Active Videos Pagination Controls */}
+            {totalActiveVideoPages > 1 && (
+              <div className="flex items-center justify-between mt-8 pt-4 border-t border-gray-200">
+                <span className="text-sm text-gray-500 font-medium">Page {activeVideoPage} of {totalActiveVideoPages}</span>
+                <div className="flex space-x-2">
+                  <button disabled={activeVideoPage === 1} onClick={() => setActiveVideoPage(activeVideoPage - 1)} className="p-1.5 border border-gray-200 rounded-lg text-gray-600 hover:bg-white disabled:opacity-40 transition shadow-sm"><ChevronLeft size={20}/></button>
+                  <button disabled={activeVideoPage === totalActiveVideoPages} onClick={() => setActiveVideoPage(activeVideoPage + 1)} className="p-1.5 border border-gray-200 rounded-lg text-gray-600 hover:bg-white disabled:opacity-40 transition shadow-sm"><ChevronRight size={20}/></button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -337,7 +362,7 @@ const Dashboard = ({ token, onLogout }) => {
         {isSuperAdmin && (
           <div className="grid grid-cols-1 gap-8 mt-8">
             
-            {/* Creators Table (With Pagination) */}
+            {/* Creators Table */}
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
               <div className="px-6 py-5 border-b border-gray-100 flex items-center justify-between">
                 <div className="flex items-center"><div className="p-2 bg-pink-100 text-pink-600 rounded-lg mr-3"><Instagram size={20} /></div><h2 className="text-lg font-bold text-gray-800">Creator Payouts</h2></div>
@@ -386,7 +411,7 @@ const Dashboard = ({ token, onLogout }) => {
               )}
             </div>
 
-            {/* Agents Table (With Linked Accounts Info) */}
+            {/* Agents Table */}
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
               <div className="px-6 py-5 border-b border-gray-100 flex items-center"><div className="p-2 bg-purple-100 text-purple-600 rounded-lg mr-3"><Users size={20} /></div><h2 className="text-lg font-bold text-gray-800">Agent Payouts</h2></div>
               <div className="overflow-x-auto">
@@ -396,7 +421,6 @@ const Dashboard = ({ token, onLogout }) => {
                   </thead>
                   <tbody className="divide-y divide-gray-100 text-sm">
                     {agents.map((agent, index) => {
-                      // Find users belonging to this agent
                       const linkedUsers = users.filter(u => u.agentName === agent.name);
                       return (
                         <tr key={index} className="hover:bg-gray-50">
@@ -405,7 +429,6 @@ const Dashboard = ({ token, onLogout }) => {
                               <span className="bg-gray-100 text-gray-600 px-2.5 py-1 rounded-full text-xs font-bold mb-2 inline-block">
                                 {agent.accountsAdded} Accounts
                               </span>
-                              {/* Display linked usernames as small chips */}
                               {linkedUsers.length > 0 && (
                                 <div className="flex flex-wrap gap-1.5 mt-1 max-w-[200px]">
                                   {linkedUsers.map(u => (
@@ -432,7 +455,7 @@ const Dashboard = ({ token, onLogout }) => {
           </div>
         )}
 
-        {/* --- MAIN DASHBOARD HISTORY SECTION (Restored with Pagination) --- */}
+        {/* --- MAIN DASHBOARD HISTORY SECTION --- */}
         {isSuperAdmin && (
           <div className="mt-8 bg-white border border-gray-100 rounded-2xl p-8 shadow-sm">
             <div className="flex flex-col md:flex-row justify-between items-center mb-6">
